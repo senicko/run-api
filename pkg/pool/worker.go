@@ -22,6 +22,7 @@ func worker(cli *client.Client, jobChan <-chan Job) {
 			job.ResultChan <- Result{
 				Err: err,
 			}
+			return
 		}
 
 		job.ResultChan <- Result{
