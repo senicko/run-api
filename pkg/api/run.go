@@ -38,6 +38,7 @@ func Run(p *pool.Pool) http.HandlerFunc {
 		if result.Err != nil {
 			s := http.StatusInternalServerError
 			http.Error(w, http.StatusText(s), s)
+			return
 		}
 
 		response, err := json.Marshal(result.Value)

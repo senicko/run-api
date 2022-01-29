@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -31,6 +32,9 @@ type Response struct {
 }
 
 func Run(ctx context.Context, cli *client.Client, runRequest Request) (*Response, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
+	defer cancel()
+
 	sandboxID, err := prepareSandbox(ctx, cli)
 	if err != nil {
 		return nil, fmt.Errorf("could not start the sandbox: %w", err)
@@ -49,10 +53,6 @@ func Run(ctx context.Context, cli *client.Client, runRequest Request) (*Response
 
 // prepareSandbox creates a new sandbox.
 func prepareSandbox(ctx context.Context, cli *client.Client) (string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
 		Image:     "bee/golang",
 		OpenStdin: true,
@@ -66,10 +66,6 @@ func prepareSandbox(ctx context.Context, cli *client.Client) (string, error) {
 
 // runInSandbox runs the code inside sandbox's docker container.
 func runInSandbox(ctx context.Context, cli *client.Client, sandboxID string, runRequest Request) (*Response, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-
 	if err := cli.ContainerStart(ctx, sandboxID, types.ContainerStartOptions{}); err != nil {
 		return nil, err
 	}
@@ -148,15 +144,30 @@ func writeToStdin(ctx context.Context, writer net.Conn, payload []byte) error {
 
 // readStd reads stdout from container's hijacked response reader.
 func readStd(ctx context.Context, reader *bufio.Reader) ([]byte, []byte, error) {
-	if err := ctx.Err(); err != nil {
+	// TODO: this can be implemented much better
+
+	resultChan := make(chan [2][]byte)
+	errChan := make(chan error)
+
+	go func() {
+		var stdout, stderr bytes.Buffer
+
+		if _, err := stdcopy.StdCopy(&stdout, &stderr, reader); err != nil {
+			errChan <- err
+		}
+
+		resultChan <- [2][]byte{
+			stdout.Bytes(),
+			stderr.Bytes(),
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, nil, fmt.Errorf("timeout")
+	case err := <-errChan:
 		return nil, nil, err
+	case result := <-resultChan:
+		return result[0], result[1], nil
 	}
-
-	var stdout, stderr bytes.Buffer
-
-	if _, err := stdcopy.StdCopy(&stdout, &stderr, reader); err != nil {
-		return nil, nil, err
-	}
-
-	return stdout.Bytes(), stderr.Bytes(), nil
 }
