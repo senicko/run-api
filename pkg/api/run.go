@@ -35,6 +35,7 @@ func Run(p *pool.Pool) http.HandlerFunc {
 			return
 		case result = <-resultChan:
 		}
+
 		if result.Err != nil {
 			s := http.StatusInternalServerError
 			http.Error(w, http.StatusText(s), s)

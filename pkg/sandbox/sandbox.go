@@ -26,21 +26,22 @@ type Request struct {
 
 // Response represents a response returned by sandbox.
 type Response struct {
-	Stdout   string `json:"stdout"`
-	Stderr   string `json:"stderr"`
-	ExitCode int    `json:"exitCode"`
+	Stdout    string `json:"stdout"`
+	Stderr    string `json:"stderr"`
+	ExecError string `json:"execError"`
+	ExitCode  int    `json:"exitCode"`
 }
 
+// Run runs run request.
 func Run(ctx context.Context, cli *client.Client, runRequest Request) (*Response, error) {
 	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 
-	sandboxID, err := prepareSandbox(ctx, cli)
+	sandboxID, err := prepareSandbox(ctx, cli, runRequest.Language)
 	if err != nil {
-		return nil, fmt.Errorf("could not start the sandbox: %w", err)
+		return nil, fmt.Errorf("failed to start the sandbox: %w", err)
 	}
 
-	// FIXME: should handle the error
 	defer removeSandbox(cli, sandboxID)
 
 	result, err := runInSandbox(ctx, cli, sandboxID, runRequest)
@@ -52,10 +53,13 @@ func Run(ctx context.Context, cli *client.Client, runRequest Request) (*Response
 }
 
 // prepareSandbox creates a new sandbox.
-func prepareSandbox(ctx context.Context, cli *client.Client) (string, error) {
+func prepareSandbox(ctx context.Context, cli *client.Client, language string) (string, error) {
+	image := "code-runner/" + language
+
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
-		Image:     "bee/golang",
-		OpenStdin: true,
+		Image:           image,
+		OpenStdin:       true,
+		NetworkDisabled: true,
 	}, nil, nil, nil, "")
 	if err != nil {
 		return "", err
@@ -67,7 +71,7 @@ func prepareSandbox(ctx context.Context, cli *client.Client) (string, error) {
 // runInSandbox runs the code inside sandbox's docker container.
 func runInSandbox(ctx context.Context, cli *client.Client, sandboxID string, runRequest Request) (*Response, error) {
 	if err := cli.ContainerStart(ctx, sandboxID, types.ContainerStartOptions{}); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to start the sandbox: %w", err)
 	}
 
 	attach, err := cli.ContainerAttach(ctx, sandboxID, types.ContainerAttachOptions{
@@ -77,52 +81,44 @@ func runInSandbox(ctx context.Context, cli *client.Client, sandboxID string, run
 		Stream: true,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to attach to the container: %w", err)
 	}
 	defer attach.Close()
 
 	runRequestJson, err := json.Marshal(runRequest)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal the request: %w", err)
 	}
 
 	if err := writeToStdin(ctx, attach.Conn, runRequestJson); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to write to the stdin: %w", err)
 	}
 
-	stdout, stderr, err := readStd(ctx, attach.Reader)
+	stdout, stderr, err := readStd(attach.Reader)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read the stdout: %w", err)
 	}
 
 	if len(stderr) != 0 {
 		return nil, fmt.Errorf("run-error: %s", string(stderr))
 	}
 
-	// TODO: probably rename RunResponse to RunResult
 	var result Response
 	if err := json.Unmarshal(stdout, &result); err != nil {
-		return nil, err
+		fmt.Println(string(stdout))
+		return nil, fmt.Errorf("failed to unmarshall: %w", err)
 	}
 
 	return &result, nil
 }
 
 // removeSandbox removes sandbox's container from the docker host.
-func removeSandbox(cli *client.Client, sandboxID string) error {
+func removeSandbox(cli *client.Client, sandboxID string) {
 	ctx := context.Background()
 
-	if err := cli.ContainerStop(ctx, sandboxID, nil); err != nil {
-		fmt.Println("stopping error: ", err)
-		return err
-	}
-
-	if err := cli.ContainerRemove(ctx, sandboxID, types.ContainerRemoveOptions{}); err != nil {
-		fmt.Println("removing error: ", err)
-		return err
-	}
-
-	return nil
+	// These shouldn't return error.
+	cli.ContainerStop(ctx, sandboxID, nil)
+	cli.ContainerRemove(ctx, sandboxID, types.ContainerRemoveOptions{})
 }
 
 // writeToStdin writes to sandbox's container stdin.
@@ -143,31 +139,12 @@ func writeToStdin(ctx context.Context, writer net.Conn, payload []byte) error {
 }
 
 // readStd reads stdout from container's hijacked response reader.
-func readStd(ctx context.Context, reader *bufio.Reader) ([]byte, []byte, error) {
-	// TODO: this can be implemented much better
+func readStd(reader *bufio.Reader) ([]byte, []byte, error) {
+	var stdout, stderr bytes.Buffer
 
-	resultChan := make(chan [2][]byte)
-	errChan := make(chan error)
-
-	go func() {
-		var stdout, stderr bytes.Buffer
-
-		if _, err := stdcopy.StdCopy(&stdout, &stderr, reader); err != nil {
-			errChan <- err
-		}
-
-		resultChan <- [2][]byte{
-			stdout.Bytes(),
-			stderr.Bytes(),
-		}
-	}()
-
-	select {
-	case <-ctx.Done():
-		return nil, nil, fmt.Errorf("timeout")
-	case err := <-errChan:
+	if _, err := stdcopy.StdCopy(&stdout, &stderr, reader); err != nil {
 		return nil, nil, err
-	case result := <-resultChan:
-		return result[0], result[1], nil
 	}
+
+	return stdout.Bytes(), stderr.Bytes(), nil
 }

@@ -35,16 +35,15 @@ type Pool struct {
 
 // New creates a new worker pool.
 func New(config Config) *Pool {
-	return &Pool{
+	pool := &Pool{
 		cli:     config.Cli,
 		workers: config.Workers,
 		JobChan: make(chan Job),
 	}
-}
 
-// Spawn spawns workers.
-func (p Pool) Spawn() {
-	for i := 0; i < p.workers; i++ {
-		go worker(p.cli, p.JobChan)
+	for i := 0; i < pool.workers; i++ {
+		go worker(pool.cli, pool.JobChan)
 	}
+
+	return pool
 }

@@ -20,7 +20,6 @@ func main() {
 		Cli:     cli,
 		Workers: 10,
 	})
-	pool.Spawn()
 
 	mux := http.NewServeMux()
 	server := server.NewServer(mux, ":8080")
