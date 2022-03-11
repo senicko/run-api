@@ -1,15 +1,37 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 
-	"github.com/senicko/run-api/pkg/pool"
-	"github.com/senicko/run-api/pkg/sandbox"
+	"github.com/senicko/run-api/pool"
+	"github.com/senicko/run-api/sandbox"
 )
 
-// Run is a request handler that allows to run code.
+func runInSandbox(ctx context.Context, p *pool.Pool, runRequest sandbox.Request) (*pool.Result, error) {
+	var result *pool.Result
+
+	job := &pool.Job{
+		Ctx:        ctx,
+		RunRequest: runRequest,
+		ResultChan: make(chan *pool.Result),
+	}
+	p.Push(job)
+
+	select {
+	case <-ctx.Done():
+		return nil, nil
+	case result = <-job.ResultChan:
+	}
+
+	if result.Err != nil {
+		return nil, result.Err
+	}
+
+	return result, nil
+}
+
 func Run(p *pool.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -21,22 +43,8 @@ func Run(p *pool.Pool) http.HandlerFunc {
 			return
 		}
 
-		resultChan := make(chan pool.Result)
-		p.JobChan <- pool.Job{
-			Ctx:        ctx,
-			RunRequest: runRequest,
-			ResultChan: resultChan,
-		}
-
-		var result pool.Result
-		select {
-		case <-ctx.Done():
-			fmt.Println("request terminated")
-			return
-		case result = <-resultChan:
-		}
-
-		if result.Err != nil {
+		result, err := runInSandbox(ctx, p, runRequest)
+		if err != nil {
 			s := http.StatusInternalServerError
 			http.Error(w, http.StatusText(s), s)
 			return

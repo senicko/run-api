@@ -1,13 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
 	"github.com/docker/docker/client"
-	"github.com/senicko/run-api/pkg/api"
-	"github.com/senicko/run-api/pkg/pool"
-	"github.com/senicko/run-api/pkg/server"
+	"github.com/senicko/run-api/api"
+	"github.com/senicko/run-api/pool"
+	"github.com/senicko/run-api/server"
 )
 
 func main() {
@@ -26,6 +27,7 @@ func main() {
 
 	mux.HandleFunc("/run", api.Method(http.MethodPost, api.Run(pool)))
 
+	fmt.Println("Starting on http://localhost:8080")
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("Failed to start the server: %v", err)
 	}
