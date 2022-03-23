@@ -12,6 +12,7 @@ import (
 
 type Request struct {
 	Language string `json:"language"`
+	Stdin    string `json:"stdin"`
 	Files    []struct {
 		Name string `json:"name"`
 		Body string `json:"body"`
@@ -54,7 +55,6 @@ func Run(ctx context.Context, cli *client.Client, sID string, runRequest Request
 	if err != nil {
 		return nil, fmt.Errorf("failed to attach to the container: %w", err)
 	}
-
 	defer attach.Close()
 
 	runRequestJson, err := json.Marshal(runRequest)
@@ -77,7 +77,6 @@ func Run(ctx context.Context, cli *client.Client, sID string, runRequest Request
 
 	var result Response
 	if err := json.Unmarshal(stdout, &result); err != nil {
-		fmt.Println(string(stdout))
 		return nil, fmt.Errorf("failed to unmarshall: %w", err)
 	}
 
@@ -87,5 +86,5 @@ func Run(ctx context.Context, cli *client.Client, sID string, runRequest Request
 func KillSandbox(cli *client.Client, sandboxID string) {
 	ctx := context.Background()
 	cli.ContainerStop(ctx, sandboxID, nil)
-	cli.ContainerRemove(ctx, sandboxID, types.ContainerRemoveOptions{})
+	// cli.ContainerRemove(ctx, sandboxID, types.ContainerRemoveOptions{})
 }

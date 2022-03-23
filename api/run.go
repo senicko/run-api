@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/senicko/run-api/pool"
@@ -45,6 +46,7 @@ func Run(p *pool.Pool) http.HandlerFunc {
 
 		result, err := runInSandbox(ctx, p, runRequest)
 		if err != nil {
+      fmt.Println(err)
 			s := http.StatusInternalServerError
 			http.Error(w, http.StatusText(s), s)
 			return
