@@ -9,15 +9,15 @@ import (
 	"github.com/senicko/run-api/sandbox"
 )
 
-type Result struct {
-	Value *sandbox.Response
+type Response struct {
+	Value *sandbox.ExecResponse
 	Err   error
 }
 
 type Job struct {
-	Ctx        context.Context
-	RunRequest sandbox.Request
-	ResultChan chan *Result
+	Ctx          context.Context
+	ExecRequest  *sandbox.ExecRequest
+	ResponseChan chan *Response
 }
 
 type Config struct {
@@ -26,45 +26,50 @@ type Config struct {
 }
 
 type Pool struct {
-	cli     *client.Client
-	workers int
-	jobs    chan *Job
+	cli          *client.Client
+	workersCount int
+	jobs         chan *Job
 }
 
+// New creates a new worker pool.
 func New(config Config) *Pool {
 	pool := &Pool{config.Cli, config.Workers, make(chan *Job)}
 
-	for i := 0; i < pool.workers; i++ {
-		go pool.handle()
+	for i := 0; i < pool.workersCount; i++ {
+		go pool.work()
 	}
 
 	return pool
 }
 
+// Push pushes a new job to the pool.
 func (p Pool) Push(job *Job) {
 	p.jobs <- job
 }
 
-func (p Pool) handle() {
+// work is a pool worker that listens for incoming jobs and handles them.
+func (p Pool) work() {
 	for job := range p.jobs {
 		func() {
 			ctx, cancel := context.WithTimeout(job.Ctx, time.Second*5)
 			defer cancel()
 
-			sID, err := sandbox.PrepareSandbox(ctx, p.cli, job.RunRequest.Language)
+			s, err := sandbox.CreateSandbox(ctx, p.cli, &job.ExecRequest.Config)
 			if err != nil {
-				job.ResultChan <- &Result{Err: fmt.Errorf("failed to prepare a sandbox: %w", err)}
+				job.ResponseChan <- &Response{Err: fmt.Errorf("pool.work: failed to create the sandbox: %w", err)}
+				return
 			}
-			defer sandbox.KillSandbox(p.cli, sID)
+			defer s.Kill()
 
-			response, err := sandbox.Run(ctx, p.cli, sID, job.RunRequest)
+			response, err := s.Exec(ctx, job.ExecRequest)
+      fmt.Println(response, err)
 
 			if err != nil {
-				job.ResultChan <- &Result{Err: fmt.Errorf("error: failed to run: %w", err)}
+				job.ResponseChan <- &Response{Err: fmt.Errorf("pool.work: failed to exec: %w", err)}
 				return
 			}
 
-			job.ResultChan <- &Result{Value: response}
+			job.ResponseChan <- &Response{Value: response}
 		}()
 	}
 }

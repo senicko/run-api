@@ -26,6 +26,9 @@ func main() {
 	server := server.NewServer(mux, ":8080")
 
 	mux.HandleFunc("/run", api.Method(http.MethodPost, api.Run(pool)))
+  mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+    fmt.Fprint(w, "Hello, World")
+  })
 
 	fmt.Println("Starting on http://localhost:8080")
 	if err := server.ListenAndServe(); err != nil {
