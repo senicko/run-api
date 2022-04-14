@@ -4,12 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/senicko/run-api/pool"
 	"github.com/senicko/run-api/sandbox"
 )
 
 // Run is a http request handler for code execution.
-func Run(p *pool.Pool) http.HandlerFunc {
+func Run(p *sandbox.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
@@ -20,19 +19,18 @@ func Run(p *pool.Pool) http.HandlerFunc {
 			return
 		}
 
-		var result *pool.Response
+		resultChan := make(chan sandbox.PoolResult)
+		p.Push(sandbox.PoolJob{
+			Ctx:         ctx,
+			ExecRequest: execRequest,
+			ResultChan:  resultChan,
+		})
 
-		job := &pool.Job{
-			Ctx:          ctx,
-			ExecRequest:  &execRequest,
-			ResponseChan: make(chan *pool.Response),
-		}
-		p.Push(job)
-
+		var result sandbox.PoolResult
 		select {
 		case <-ctx.Done():
 			return
-		case result = <-job.ResponseChan:
+		case result = <-resultChan:
 		}
 
 		if result.Err != nil {
