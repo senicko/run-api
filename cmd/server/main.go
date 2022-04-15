@@ -6,9 +6,9 @@ import (
 	"net/http"
 
 	"github.com/docker/docker/client"
-	"github.com/senicko/run-api/api"
-	"github.com/senicko/run-api/sandbox"
-	"github.com/senicko/run-api/server"
+	"github.com/senicko/run-api/pkg/api"
+	"github.com/senicko/run-api/pkg/sandbox"
+	"github.com/senicko/run-api/pkg/server"
 )
 
 func main() {

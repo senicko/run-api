@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/senicko/run-api/sandbox"
+	"github.com/senicko/run-api/pkg/sandbox"
 )
 
 // Run is a http request handler for code execution.
