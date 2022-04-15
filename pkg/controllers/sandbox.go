@@ -11,7 +11,7 @@ import (
 
 type SandboxController struct {
 	sandboxService *services.SandboxService
-	logger         *zap.Logger 
+	logger         *zap.Logger
 }
 
 // NewSandboxController creates a new sandbox controller.
@@ -30,18 +30,18 @@ func (c *SandboxController) Run(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-  result, err := c.sandboxService.ProcessRequest(r.Context(), execRequest)
-  if err != nil {
-    http.Error(w, "Failed to execute", http.StatusInternalServerError)
-    return
-  }
-  
-  resultJson, err := json.Marshal(result)
-  if err != nil {
-    http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-    return
-  }
+	result, err := c.sandboxService.ProcessRequest(r.Context(), execRequest)
+	if err != nil {
+		http.Error(w, "Failed to execute", http.StatusInternalServerError)
+		return
+	}
 
-  w.Header().Set("Content-Type", "application/json")
-  w.Write(resultJson)
+	resultJson, err := json.Marshal(result)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(resultJson)
 }
