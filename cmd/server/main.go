@@ -1,36 +1,41 @@
 package main
 
 import (
-	"fmt"
-	"log"
 	"net/http"
+  "time"
 
-	"github.com/docker/docker/client"
 	"github.com/senicko/run-api/pkg/api"
-	"github.com/senicko/run-api/pkg/sandbox"
-	"github.com/senicko/run-api/pkg/server"
+	"github.com/senicko/run-api/pkg/controllers"
+	"github.com/senicko/run-api/pkg/services"
+	"go.uber.org/zap"
 )
 
 func main() {
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	if err != nil {
-		log.Fatal(err)
-	}
+  logger, _ := zap.NewProduction()
+  defer logger.Sync()
 
-	pool := sandbox.NewPool(cli)
-  pool.Start(10)
+  sandboxService, err := services.NewSandboxService(logger, services.SandboxServiceConfig{
+    PoolWorkers: 8,
+  })
+  if err != nil {
+    logger.Error("failed to create sandbox service")
+  }
+
+  sandboxController := controllers.NewSandboxController(logger, sandboxService)
 
 	mux := http.NewServeMux()
-	server := server.NewServer(mux, ":8080")
+	mux.HandleFunc("/run", api.Method(http.MethodPost, sandboxController.Run))
 
-	mux.HandleFunc("/run", api.Method(http.MethodPost, api.Run(pool)))
+	server := &http.Server{
+    Addr:         ":8080",
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  120 * time.Second,
+		Handler:      mux,
+	}
 
-  mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-    fmt.Fprint(w, "healthy")
-  })
-
-	fmt.Println("Starting on http://localhost:8080")
+	logger.Info("Starting on http://localhost:8080")
 	if err := server.ListenAndServe(); err != nil {
-		log.Fatalf("Failed to start the server: %v", err)
+    logger.Fatal("failed to start")
 	}
 }

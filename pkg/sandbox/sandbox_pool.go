@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/client"
+	"go.uber.org/zap"
 	"golang.org/x/net/context"
 )
 
@@ -20,12 +21,14 @@ type PoolResult struct {
 }
 
 type Pool struct {
+	logger  *zap.Logger
 	cli     *client.Client
 	jobChan chan PoolJob
 }
 
-func NewPool(cli *client.Client) *Pool {
+func NewPool(logger *zap.Logger, cli *client.Client) *Pool {
 	return &Pool{
+		logger:  logger,
 		cli:     cli,
 		jobChan: make(chan PoolJob),
 	}
