@@ -12,9 +12,19 @@ Executes the code inside docker container.
 
 ### Request
 
-Requets body is a json configuration object passed to [bee](https://github.com/senicko/bee). Checkout bee's readme for more info.
+Example request that prints text passed with stdin.
 
-- language `target language`
-- files `array of input files`
-  - name `name of the file`
-  - content `content of the file`
+```json
+{
+    "config": {
+        "language": "golang"
+    },
+    "stdin": "test",
+    "files": [
+        {
+            "name": "main.go",
+            "body": "package main \n import (\n \"fmt\" \n \"bufio\" \n \"os\" \n ) \n func main() { reader := bufio.NewReader(os.Stdin) \n name, _ := reader.ReadString('\\n') \n fmt.Println(name) }"
+        }
+    ]
+}
+```
